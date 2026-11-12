@@ -18,10 +18,17 @@ idea into a design that a teammate could build from without asking us anything.
 
 | Phase | Deliverable | Location | Status |
 | ----- | ----------- | -------- | ------ |
+<<<<<<< HEAD
 | 1 | UML class diagram, relationship classification, interface/abstract and is-a/has-a decisions, data contract | [phase1-class-diagram.md](./phase1-class-diagram.md) | Complete |
 | 2 | Design problem, plus the pattern that solves it (Observer) and why | `phase2-design-pattern.md` | Next |
 | 3 | Java implementation of the pattern, using our feature's real class names | `java/` | Pending |
 | 4 | Translation of the Java design into EverGrace's TypeScript code (domain → queries → actions → components) | `src/**` + `phase4-typescript-translation.md` | Pending |
+=======
+| 1 | UML class diagram, relationship classification, interface/abstract and is-a/has-a decisions, data contract | [phase1-class-diagram.md](./phase1-class-diagram.md) | ✅ Complete |
+| 2 | Design problem, plus the pattern that solves it (Observer) and why | [phase2-design-pattern.md](./phase2-design-pattern.md) | ✅ Complete |
+| 3 | Java implementation of the pattern, using our feature's real class names | [phase3-java-implementation.md](./phase3-java-implementation.md) & [`java/`](./java/evergrace/calendar/) | ✅ Complete |
+| 4 | Translation of the Java design into EverGrace's TypeScript code (domain → queries → actions → components) | [phase4-typescript-translation.md](./phase4-typescript-translation.md) & [`src/`](../src/) | ✅ Complete |
+>>>>>>> 958a77a (docs(mp2): phase 4 - document TypeScript translation and update Mini-Project 2 README)
 
 ## How MP1 maps to MP2
 
@@ -33,3 +40,4 @@ idea into a design that a teammate could build from without asking us anything.
 | Step 4: `scheduleVideoRelease(input)`, `videoScheduleSchema` | Operations on `ContentCalendarService` and the Zod contract |
 | Step 4: alternate flow "missing mandatory fields" | The `ContentItem.validateReadiness()` abstract hook |
 | Step 5: `publishedAt <= now` query scope | Invariant I3, which every public read model must enforce |
+
