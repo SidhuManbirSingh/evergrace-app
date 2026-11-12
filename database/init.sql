@@ -64,6 +64,17 @@ CREATE TABLE "HealthCheckIn" (
 );
 
 -- CreateTable
+CREATE TABLE "Plan" (
+    "key" TEXT NOT NULL,
+    "price" TEXT NOT NULL,
+    "perks" TEXT NOT NULL DEFAULT '[]',
+    "unlocks" TEXT NOT NULL,
+    "order" INTEGER NOT NULL DEFAULT 0,
+
+    CONSTRAINT "Plan_pkey" PRIMARY KEY ("key")
+);
+
+-- CreateTable
 CREATE TABLE "Category" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -264,6 +275,9 @@ CREATE INDEX "MagicLinkToken_email_idx" ON "MagicLinkToken"("email");
 CREATE UNIQUE INDEX "HealthCheckIn_userId_key" ON "HealthCheckIn"("userId");
 
 -- CreateIndex
+CREATE INDEX "Plan_order_idx" ON "Plan"("order");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Category_name_key" ON "Category"("name");
 
 -- CreateIndex
@@ -277,6 +291,9 @@ CREATE UNIQUE INDEX "Video_slug_key" ON "Video"("slug");
 
 -- CreateIndex
 CREATE INDEX "Video_status_createdAt_idx" ON "Video"("status", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "Video_status_publishedAt_idx" ON "Video"("status", "publishedAt");
 
 -- CreateIndex
 CREATE INDEX "Video_categoryId_idx" ON "Video"("categoryId");
@@ -316,6 +333,9 @@ CREATE INDEX "MoodCheckIn_userId_createdAt_idx" ON "MoodCheckIn"("userId", "crea
 
 -- CreateIndex
 CREATE UNIQUE INDEX "BlogPost_slug_key" ON "BlogPost"("slug");
+
+-- CreateIndex
+CREATE INDEX "BlogPost_publishedAt_idx" ON "BlogPost"("publishedAt");
 
 -- AddForeignKey
 ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

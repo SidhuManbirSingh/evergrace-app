@@ -148,7 +148,7 @@ model Video {
   stance     String // Stance
   duration   Int // seconds
   access     String   @default("FREE") // AccessLevel
-  status     String   @default("DRAFT") // VideoStatus
+  status     String   @default("DRAFT") // VideoStatus: DRAFT | PROCESSING | SCHEDULED | PUBLISHED
 
   // Playback. `muxAssetId`/`muxPlaybackId` are populated when Mux is
   // configured; `sourceUrl` is the MVP fallback used by the HTML5 player.
@@ -166,6 +166,7 @@ model Video {
   publishedAt     DateTime?
 
   @@index([status, createdAt])
+  @@index([status, publishedAt])
   @@index([categoryId])
 }
 
@@ -297,6 +298,8 @@ model BlogPost {
   thumbnailUrl String?
   publishedAt  DateTime @default(now())
   readMinutes  Int
+
+  @@index([publishedAt])
 }
 
 model TeamMember {
