@@ -15,9 +15,18 @@ export const metadata: Metadata = { title: "Admin sign-in" };
  * which would render the layout again, forever. The URL is still /admin/login,
  * because route groups don't appear in the path.
  */
-export default async function AdminLoginPage() {
+export default async function AdminLoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
   const viewer = await getViewer();
-  if (viewer?.role === "ADMIN") redirect("/admin/reports");
+  const { next } = await searchParams;
+  const nextPath =
+    typeof next === "string" && next.startsWith("/admin") && !next.startsWith("/admin/login")
+      ? next
+      : "/admin/reports";
+  if (viewer?.role === "ADMIN") redirect(nextPath);
 
   return (
     <main className="mx-auto max-w-[520px] px-7 pb-[90px] pt-16">
@@ -33,7 +42,7 @@ export default async function AdminLoginPage() {
           Restricted area. Staff credentials required.
         </p>
 
-        <AdminLoginForm />
+        <AdminLoginForm nextPath={nextPath} />
 
         <p className="mt-5 text-center">
           <Link href="/" className="text-muted underline">

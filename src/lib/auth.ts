@@ -191,7 +191,23 @@ export async function verifyAdminCredentials(
   password: string,
 ): Promise<{ ok: true; userId: string } | { ok: false }> {
   const email = normalizeEmail(rawEmail);
-  const user = await prisma.user.findUnique({ where: { email } });
+  let user = await prisma.user.findUnique({ where: { email } });
+
+  // If the database has not been seeded yet and the caller is signing in with
+  // the configured seed admin email, bootstrap the admin account on first login.
+  const seedEmail = normalizeEmail(process.env.SEED_ADMIN_EMAIL ?? "admin@evergrace.example");
+  const seedPassword = process.env.SEED_ADMIN_PASSWORD ?? "EverGrace!Admin1";
+  if (!user && email === seedEmail) {
+    user = await prisma.user.create({
+      data: {
+        email: seedEmail,
+        name: "EverGrace Staff",
+        role: "ADMIN",
+        plan: "PREMIUM",
+        passwordHash: await bcrypt.hash(seedPassword, 10),
+      },
+    });
+  }
 
   // Compare against a dummy hash when the account is missing or member-only so
   // the response time does not reveal which emails are admin accounts.

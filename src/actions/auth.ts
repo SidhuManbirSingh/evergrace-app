@@ -60,7 +60,14 @@ export async function adminSignIn(
   }
 
   await createSession(result.userId);
-  redirect("/admin/reports");
+  const nextRaw = formData.get("next");
+  const nextPath =
+    typeof nextRaw === "string" &&
+    nextRaw.startsWith("/admin") &&
+    !nextRaw.startsWith("/admin/login")
+      ? nextRaw
+      : "/admin/reports";
+  redirect(nextPath);
 }
 
 export async function signOut(): Promise<void> {

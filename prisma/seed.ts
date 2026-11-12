@@ -424,6 +424,7 @@ async function main() {
       duration: v.minutes * MIN,
       access: v.access,
       status: v.status,
+      sourceUrl: `https://stream.evergrace.example/${slug}.mp4`,
       createdAt: daysAgo(60 - index * 7),
       publishedAt: v.status === "PUBLISHED" ? daysAgo(60 - index * 7) : null,
     };
@@ -460,6 +461,26 @@ async function main() {
       text: line.text,
     })),
   });
+
+  // Attach a starter chapter to the draft video ("Evening Wind-Down") so it is
+  // ready to be scheduled on the Content Calendar right after seeding.
+  const draftId = videoBySlug.get(slugify("Evening Wind-Down"));
+  if (draftId) {
+    await prisma.chapter.deleteMany({ where: { videoId: draftId } });
+    await prisma.chapter.create({
+      data: {
+        videoId: draftId,
+        title: "Evening Breath & Relaxation",
+        order: 0,
+        lessons: {
+          create: [
+            { title: "Settling into the chair", duration: 5 * MIN, order: 0 },
+            { title: "Slow four-count exhalation", duration: 5 * MIN, order: 1 },
+          ],
+        },
+      },
+    });
+  }
 
   // -- admin ---------------------------------------------------------------
   const adminEmail = (process.env.SEED_ADMIN_EMAIL ?? "admin@evergrace.example").toLowerCase();

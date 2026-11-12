@@ -1,12 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import { adminSignIn, type FormState } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 
-export function AdminLoginForm() {
+export function AdminLoginForm({ nextPath = "/admin/reports" }: { nextPath?: string }) {
+  const [email, setEmail] = useState("admin@evergrace.example");
+  const [password, setPassword] = useState("EverGrace!Admin1");
   const [state, formAction, pending] = useActionState<FormState | null, FormData>(
     adminSignIn,
     null,
@@ -14,6 +16,7 @@ export function AdminLoginForm() {
 
   return (
     <form action={formAction}>
+      <input type="hidden" name="next" value={nextPath} />
       <Field label="Work email" htmlFor="email" error={state?.fieldErrors?.email}>
         <Input
           id="email"
@@ -22,6 +25,8 @@ export function AdminLoginForm() {
           required
           autoComplete="username"
           placeholder="admin@evergrace.example"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
         />
       </Field>
 
@@ -38,6 +43,8 @@ export function AdminLoginForm() {
           required
           autoComplete="current-password"
           placeholder="••••••••"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
         />
       </Field>
 
