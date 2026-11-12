@@ -18,10 +18,10 @@ idea into a design that a teammate could build from without asking us anything.
 
 | Phase | Deliverable | Location | Status |
 | ----- | ----------- | -------- | ------ |
-| 1 | UML class diagram, relationship classification, interface/abstract and is-a/has-a decisions, data contract | [phase1-class-diagram.md](./phase1-class-diagram.md) | ✅ Complete |
-| 2 | Design problem, plus the pattern that solves it (Observer) and why | `phase2-design-pattern.md` | ⏳ Next |
-| 3 | Java implementation of the pattern, using our feature's real class names | `java/` | ⏳ Pending |
-| 4 | Translation of the Java design into EverGrace's TypeScript code (domain → queries → actions → components) | `src/**` + `phase4-typescript-translation.md` | ⏳ Pending |
+| 1 | UML class diagram, relationship classification, interface/abstract and is-a/has-a decisions, data contract | [phase1-class-diagram.md](./phase1-class-diagram.md) | Complete |
+| 2 | Design problem, plus the pattern that solves it (Observer) and why | `phase2-design-pattern.md` | Next |
+| 3 | Java implementation of the pattern, using our feature's real class names | `java/` | Pending |
+| 4 | Translation of the Java design into EverGrace's TypeScript code (domain → queries → actions → components) | `src/**` + `phase4-typescript-translation.md` | Pending |
 
 ## How MP1 maps to MP2
 
