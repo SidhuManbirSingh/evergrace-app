@@ -18,8 +18,15 @@ export type Plan = (typeof PLANS)[number];
 export const ACCESS_LEVELS = ["FREE", "MEMBERS", "PREMIUM"] as const;
 export type AccessLevel = (typeof ACCESS_LEVELS)[number];
 
-export const VIDEO_STATUSES = ["DRAFT", "PROCESSING", "PUBLISHED"] as const;
+export const VIDEO_STATUSES = ["DRAFT", "PROCESSING", "SCHEDULED", "PUBLISHED"] as const;
 export type VideoStatus = (typeof VIDEO_STATUSES)[number];
+export type ContentStatus = VideoStatus;
+
+export const CONTENT_TYPES = ["VIDEO", "BLOG_POST"] as const;
+export type ContentType = (typeof CONTENT_TYPES)[number];
+
+export const RELEASE_TRIGGERS = ["MANUAL_PUBLISH", "SCHEDULED_DUE"] as const;
+export type ReleaseTrigger = (typeof RELEASE_TRIGGERS)[number];
 
 export const TRACKS = ["SEATED", "SUPPORTED", "ACTIVE"] as const;
 export type Track = (typeof TRACKS)[number];
@@ -220,6 +227,7 @@ export const TRACK_LABEL: Record<Track, string> = {
 export const STATUS_LABEL: Record<VideoStatus, string> = {
   DRAFT: "Draft",
   PROCESSING: "Processing",
+  SCHEDULED: "Scheduled",
   PUBLISHED: "Published",
 };
 
@@ -301,4 +309,453 @@ export function slugify(input: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
+}
+
+// ---------------------------------------------------------------------------
+// Content Calendar & Observer Design Pattern (Mini-Project 2)
+// ---------------------------------------------------------------------------
+
+export type ReadinessResult = {
+  ok: boolean;
+  missing: string[];
+};
+
+export type ScheduleResult = {
+  ok: boolean;
+  message: string;
+};
+
+/**
+ * Behavioural contract for any entity that can be scheduled on the Content Calendar.
+ * Direct TypeScript translation of `evergrace.calendar.Schedulable`.
+ */
+export interface Schedulable {
+  scheduleRelease(releaseAt: Date, now?: Date): void;
+  reschedule(releaseAt: Date, now?: Date): void;
+  unschedule(): void;
+  publishNow(now?: Date): void;
+  isReleased(now?: Date): boolean;
+  isDue(now?: Date): boolean;
+  getStatus(): ContentStatus;
+  getPublishedAt(): Date | null;
+}
+
+/**
+ * Pure temporal check (Invariant I3 / MP1 Step 5 Misuse Case Countermeasure):
+ * Non-admin viewers may access content iff status === "PUBLISHED" and publishedAt <= now.
+ */
+export function isContentReleased(
+  item: { status: ContentStatus; publishedAt?: Date | null },
+  now: Date = new Date(),
+): boolean {
+  if (item.status !== "PUBLISHED") return false;
+  if (!item.publishedAt) return true;
+  return item.publishedAt.getTime() <= now.getTime();
+}
+
+/**
+ * True when a SCHEDULED item's target release timestamp has arrived.
+ */
+export function isContentDue(
+  item: { status: ContentStatus; publishedAt?: Date | null },
+  now: Date = new Date(),
+): boolean {
+  return (
+    item.status === "SCHEDULED" &&
+    item.publishedAt != null &&
+    item.publishedAt.getTime() <= now.getTime()
+  );
+}
+
+/**
+ * Requirement R2: A scheduled release timestamp must be strictly in the future.
+ */
+export function canScheduleRelease(releaseAt: Date, now: Date = new Date()): boolean {
+  return !Number.isNaN(releaseAt.getTime()) && releaseAt.getTime() > now.getTime();
+}
+
+/**
+ * Abstract base class for all publishable content in EverGrace (`VideoContent` and `BlogPostContent`).
+ * Direct TypeScript translation of `evergrace.calendar.ContentItem`.
+ */
+export abstract class ContentItem implements Schedulable {
+  readonly id: string;
+  title: string;
+  readonly slug: string;
+  thumbnailUrl: string | null;
+  protected status: ContentStatus;
+  readonly createdAt: Date;
+  protected publishedAt: Date | null;
+
+  protected constructor(params: {
+    id: string;
+    title: string;
+    slug: string;
+    thumbnailUrl?: string | null;
+    status: ContentStatus;
+    createdAt?: Date;
+    publishedAt?: Date | null;
+  }) {
+    this.id = params.id;
+    this.title = params.title;
+    this.slug = params.slug;
+    this.thumbnailUrl = params.thumbnailUrl ?? null;
+    this.status = params.status;
+    this.createdAt = params.createdAt ?? new Date();
+    this.publishedAt = params.publishedAt ?? null;
+  }
+
+  scheduleRelease(releaseAt: Date, now: Date = new Date()): void {
+    if (this.status !== "DRAFT") {
+      throw new Error(`Only DRAFT content can be scheduled (current: ${this.status}).`);
+    }
+    if (!canScheduleRelease(releaseAt, now)) {
+      throw new Error("Release date must be in the future.");
+    }
+    const readiness = this.validateReadiness();
+    if (!readiness.ok) {
+      throw new Error(`Missing required fields: ${readiness.missing.join(", ")}`);
+    }
+    this.status = "SCHEDULED";
+    this.publishedAt = releaseAt;
+  }
+
+  reschedule(releaseAt: Date, now: Date = new Date()): void {
+    if (this.status !== "SCHEDULED") {
+      throw new Error("Only SCHEDULED content can be rescheduled.");
+    }
+    if (!canScheduleRelease(releaseAt, now)) {
+      throw new Error("Release date must be in the future.");
+    }
+    this.publishedAt = releaseAt;
+  }
+
+  unschedule(): void {
+    if (this.status !== "SCHEDULED") {
+      throw new Error("Only SCHEDULED content can be unscheduled.");
+    }
+    this.status = "DRAFT";
+    this.publishedAt = null;
+  }
+
+  publishNow(now: Date = new Date()): void {
+    const readiness = this.validateReadiness();
+    if (!readiness.ok) {
+      throw new Error(`Missing required fields: ${readiness.missing.join(", ")}`);
+    }
+    this.status = "PUBLISHED";
+    if (!this.publishedAt || this.publishedAt.getTime() > now.getTime()) {
+      this.publishedAt = now;
+    }
+  }
+
+  isReleased(now: Date = new Date()): boolean {
+    return isContentReleased({ status: this.status, publishedAt: this.publishedAt }, now);
+  }
+
+  isDue(now: Date = new Date()): boolean {
+    return isContentDue({ status: this.status, publishedAt: this.publishedAt }, now);
+  }
+
+  getStatus(): ContentStatus {
+    return this.status;
+  }
+
+  getPublishedAt(): Date | null {
+    return this.publishedAt;
+  }
+
+  abstract validateReadiness(): ReadinessResult;
+  abstract getContentType(): ContentType;
+  abstract getPublicPath(): string;
+}
+
+/**
+ * Concrete subclass of ContentItem representing a martial-arts training video.
+ * Direct TypeScript translation of `evergrace.calendar.Video`.
+ */
+export class VideoContent extends ContentItem {
+  readonly categoryId: string;
+  readonly masterId: string | null;
+  readonly levelId: string | null;
+  readonly durationSeconds: number;
+  readonly access: AccessLevel;
+  readonly sourceUrl: string | null;
+  readonly muxPlaybackId: string | null;
+  readonly chapterCount: number;
+
+  constructor(params: {
+    id: string;
+    title: string;
+    slug: string;
+    thumbnailUrl?: string | null;
+    status: ContentStatus;
+    createdAt?: Date;
+    publishedAt?: Date | null;
+    categoryId: string;
+    masterId?: string | null;
+    levelId?: string | null;
+    durationSeconds: number;
+    access?: AccessLevel;
+    sourceUrl?: string | null;
+    muxPlaybackId?: string | null;
+    chapterCount?: number;
+  }) {
+    super(params);
+    this.categoryId = params.categoryId;
+    this.masterId = params.masterId ?? null;
+    this.levelId = params.levelId ?? null;
+    this.durationSeconds = params.durationSeconds;
+    this.access = params.access ?? "FREE";
+    this.sourceUrl = params.sourceUrl ?? null;
+    this.muxPlaybackId = params.muxPlaybackId ?? null;
+    this.chapterCount = params.chapterCount ?? 0;
+  }
+
+  validateReadiness(): ReadinessResult {
+    const missing: string[] = [];
+    if (!this.title.trim()) missing.push("title");
+    if (!this.categoryId.trim()) missing.push("category");
+    if (!this.masterId) missing.push("master (instructor)");
+    if (this.chapterCount <= 0) missing.push("syllabus chapter");
+    if (this.durationSeconds <= 0) missing.push("duration");
+    if (!this.sourceUrl && !this.muxPlaybackId) missing.push("sourceUrl");
+    return { ok: missing.length === 0, missing };
+  }
+
+  getContentType(): ContentType {
+    return "VIDEO";
+  }
+
+  getPublicPath(): string {
+    return `/library/${this.slug}`;
+  }
+}
+
+/**
+ * Concrete subclass of ContentItem representing a Steady Path Journal article.
+ * Direct TypeScript translation of `evergrace.calendar.BlogPost`.
+ */
+export class BlogPostContent extends ContentItem {
+  readonly category: string;
+  readonly excerpt: string;
+  readonly body: string;
+  readonly readMinutes: number;
+
+  constructor(params: {
+    id: string;
+    title: string;
+    slug: string;
+    thumbnailUrl?: string | null;
+    status: ContentStatus;
+    createdAt?: Date;
+    publishedAt?: Date | null;
+    category: string;
+    excerpt: string;
+    body: string;
+    readMinutes: number;
+  }) {
+    if (params.status === "PROCESSING") {
+      throw new Error("Invariant I4: BlogPost cannot have PROCESSING status.");
+    }
+    super(params);
+    this.category = params.category;
+    this.excerpt = params.excerpt;
+    this.body = params.body;
+    this.readMinutes = params.readMinutes;
+  }
+
+  validateReadiness(): ReadinessResult {
+    const missing: string[] = [];
+    if (!this.title.trim()) missing.push("title");
+    if (!this.category.trim()) missing.push("category");
+    if (this.excerpt.trim().length < 10) missing.push("excerpt (min 10 chars)");
+    if (this.body.trim().length < 50) missing.push("body (min 50 chars)");
+    if (this.readMinutes <= 0) missing.push("readMinutes");
+    return { ok: missing.length === 0, missing };
+  }
+
+  getContentType(): ContentType {
+    return "BLOG_POST";
+  }
+
+  getPublicPath(): string {
+    return `/blog/${this.slug}`;
+  }
+}
+
+/**
+ * Immutable event payload emitted by ContentReleaseSubject whenever a ContentItem
+ * transitions into PUBLISHED.
+ */
+export type ReleaseEvent = {
+  readonly item: ContentItem;
+  readonly previousStatus: ContentStatus;
+  readonly releasedAt: Date;
+  readonly trigger: ReleaseTrigger;
+};
+
+/**
+ * Observer interface in the Observer pattern.
+ */
+export interface ReleaseObserver {
+  onContentReleased(event: ReleaseEvent): void | Promise<void>;
+}
+
+/**
+ * Subject interface in the Observer pattern.
+ */
+export interface ContentReleaseSubject {
+  registerObserver(observer: ReleaseObserver): void;
+  removeObserver(observer: ReleaseObserver): void;
+  notifyObservers(event: ReleaseEvent): Promise<void>;
+}
+
+/**
+ * Concrete Observer: ReleaseAuditObserver.
+ * Records structured telemetry entries whenever content transitions to PUBLISHED.
+ */
+export class ReleaseAuditObserver implements ReleaseObserver {
+  private readonly logs: string[] = [];
+
+  onContentReleased(event: ReleaseEvent): void {
+    const item = event.item;
+    const publishedIso = item.getPublishedAt()?.toISOString() ?? event.releasedAt.toISOString();
+    this.logs.push(
+      `[${event.releasedAt.toISOString()}] ${item.title} (${item.getPublicPath()}) transitioned ${event.previousStatus} -> PUBLISHED via ${event.trigger} at ${publishedIso}`,
+    );
+  }
+
+  getAuditLog(): readonly string[] {
+    return this.logs;
+  }
+}
+
+/**
+ * Concrete Subject and domain coordinator for the Content Calendar.
+ * Direct TypeScript translation of `evergrace.calendar.ContentCalendarService`.
+ */
+export class ContentCalendarService implements ContentReleaseSubject {
+  private readonly observers: ReleaseObserver[] = [];
+  private readonly catalogItems: ContentItem[] = [];
+
+  registerContent(item: ContentItem): void {
+    this.catalogItems.push(item);
+  }
+
+  registerObserver(observer: ReleaseObserver): void {
+    if (!this.observers.includes(observer)) {
+      this.observers.push(observer);
+    }
+  }
+
+  removeObserver(observer: ReleaseObserver): void {
+    const idx = this.observers.indexOf(observer);
+    if (idx >= 0) {
+      this.observers.splice(idx, 1);
+    }
+  }
+
+  async notifyObservers(event: ReleaseEvent): Promise<void> {
+    for (const observer of [...this.observers]) {
+      await observer.onContentReleased(event);
+    }
+  }
+
+  scheduleRelease(
+    item: ContentItem,
+    releaseAt: Date,
+    actor: { role?: Role } | null | undefined,
+    now: Date = new Date(),
+  ): ScheduleResult {
+    if (actor?.role !== "ADMIN") {
+      return { ok: false, message: "Forbidden: ADMIN role required." };
+    }
+    try {
+      item.scheduleRelease(releaseAt, now);
+      const kindLabel = item.getContentType() === "VIDEO" ? "Video" : "Blog post";
+      return { ok: true, message: `${kindLabel} scheduled successfully.` };
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : "Unable to schedule." };
+    }
+  }
+
+  reschedule(
+    item: ContentItem,
+    releaseAt: Date,
+    actor: { role?: Role } | null | undefined,
+    now: Date = new Date(),
+  ): ScheduleResult {
+    if (actor?.role !== "ADMIN") {
+      return { ok: false, message: "Forbidden: ADMIN role required." };
+    }
+    try {
+      item.reschedule(releaseAt, now);
+      return { ok: true, message: "Release date updated." };
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : "Unable to reschedule." };
+    }
+  }
+
+  unschedule(item: ContentItem, actor: { role?: Role } | null | undefined): ScheduleResult {
+    if (actor?.role !== "ADMIN") {
+      return { ok: false, message: "Forbidden: ADMIN role required." };
+    }
+    try {
+      item.unschedule();
+      return { ok: true, message: `Returned “${item.title}” to Draft.` };
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : "Unable to unschedule." };
+    }
+  }
+
+  async publishNow(
+    item: ContentItem,
+    actor: { role?: Role } | null | undefined,
+    now: Date = new Date(),
+  ): Promise<ScheduleResult> {
+    if (actor?.role !== "ADMIN") {
+      return { ok: false, message: "Forbidden: ADMIN role required." };
+    }
+    const before = item.getStatus();
+    try {
+      item.publishNow(now);
+      if (before !== "PUBLISHED") {
+        await this.notifyObservers({
+          item,
+          previousStatus: before,
+          releasedAt: now,
+          trigger: "MANUAL_PUBLISH",
+        });
+      }
+      return { ok: true, message: `Published “${item.title}”.` };
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : "Unable to publish." };
+    }
+  }
+
+  async releaseDue(now: Date = new Date()): Promise<ReleaseEvent[]> {
+    const events: ReleaseEvent[] = [];
+    const sorted = [...this.catalogItems].sort((a, b) => {
+      const aTime = a.getPublishedAt()?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const bTime = b.getPublishedAt()?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      return aTime - bTime;
+    });
+
+    for (const item of sorted) {
+      if (item.isDue(now)) {
+        const before = item.getStatus();
+        item.publishNow(now);
+        const event: ReleaseEvent = {
+          item,
+          previousStatus: before,
+          releasedAt: now,
+          trigger: "SCHEDULED_DUE",
+        };
+        events.push(event);
+        await this.notifyObservers(event);
+      }
+    }
+    return events;
+  }
 }
