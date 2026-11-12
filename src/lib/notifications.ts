@@ -1,7 +1,13 @@
 import "server-only";
 
 import { prisma } from "./db";
-import { categoryReason, levelReason, masterReason } from "./domain";
+import {
+  categoryReason,
+  levelReason,
+  masterReason,
+  type ReleaseEvent,
+  type ReleaseObserver,
+} from "./domain";
 
 /**
  * Publish fan-out — spec §6.8.
@@ -71,4 +77,23 @@ function reasonPriority(reason: string): number {
   if (reason.startsWith("New from Master")) return 2;
   if (reason.startsWith("New in Level")) return 1;
   return 0;
+}
+
+/**
+ * Concrete Observer 1 (Mini-Project 2):
+ * Listens for ReleaseEvents on ContentCalendarService and fans out member
+ * notifications whenever a Video transitions into PUBLISHED.
+ */
+export class MemberNotificationObserver implements ReleaseObserver {
+  private totalNotified = 0;
+
+  async onContentReleased(event: ReleaseEvent): Promise<void> {
+    if (event.item.getContentType() !== "VIDEO") return;
+    const count = await fanOutNewVideo(event.item.id);
+    this.totalNotified += count;
+  }
+
+  getTotalNotified(): number {
+    return this.totalNotified;
+  }
 }
