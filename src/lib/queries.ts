@@ -9,11 +9,14 @@ import {
   deriveMemberStatus,
   formatDuration,
   INTENSITY_LABEL,
+  isContentReleased,
   STANCE_LABEL,
+  VideoContent,
   type AccessLevel,
   type Intensity,
   type MemberStatus,
   type Plan,
+  type ReadinessResult,
   type Stance,
   type Track,
   type VideoStatus,
@@ -27,16 +30,69 @@ import type { RosterFilter } from "./validation";
 
 export type PlanCatalogEntry = { price: string; perks: string[]; unlocks: string };
 
-/** Admin-editable pricing/perks copy for every plan, keyed by Plan. */
+const DEFAULT_PLAN_CATALOG: Record<Plan, PlanCatalogEntry> = {
+  BASIC: {
+    price: "Free",
+    unlocks: "Free videos only.",
+    perks: ["All free videos", "Progress tracking", "Health check-in"],
+  },
+  MEMBER: {
+    price: "$9 / mo",
+    unlocks: "Free and Members-only videos.",
+    perks: ["Everything in Basic", "Members-only classes", "Subscribe to masters & levels"],
+  },
+  PREMIUM: {
+    price: "$19 / mo",
+    unlocks: "Everything, including premium masterclasses.",
+    perks: ["Everything in Member", "Premium masterclasses", "Early access to new videos"],
+  },
+};
+
+/** Admin-editable pricing/perks copy for each plan, keyed by Plan. */
 export async function getPlanCatalog(): Promise<Record<Plan, PlanCatalogEntry>> {
-  const rows = await prisma.plan.findMany({ orderBy: { order: "asc" } });
-  const catalog = {} as Record<Plan, PlanCatalogEntry>;
-  for (const row of rows) {
-    catalog[row.key as Plan] = {
-      price: row.price,
-      unlocks: row.unlocks,
-      perks: JSON.parse(row.perks) as string[],
-    };
+  const catalog: Record<Plan, PlanCatalogEntry> = { ...DEFAULT_PLAN_CATALOG };
+  try {
+    const rows = await prisma.plan.findMany({ orderBy: { order: "asc" } });
+    for (const row of rows) {
+      catalog[row.key as Plan] = {
+        price: row.price,
+        unlocks: row.unlocks,
+        perks: JSON.parse(row.perks) as string[],
+      };
+    }
+  } catch {
+    // If the Postgres volume was initialized before the Plan table existed,
+    // create and seed the table on the fly so existing volumes self-heal.
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "Plan" (
+          "key" TEXT NOT NULL PRIMARY KEY,
+          "price" TEXT NOT NULL,
+          "perks" TEXT NOT NULL DEFAULT '[]',
+          "unlocks" TEXT NOT NULL,
+          "order" INTEGER NOT NULL DEFAULT 0
+        );
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE INDEX IF NOT EXISTS "Plan_order_idx" ON "Plan"("order");
+      `);
+      const entries = Object.entries(DEFAULT_PLAN_CATALOG) as [Plan, PlanCatalogEntry][];
+      for (const [i, [key, val]] of entries.entries()) {
+        await prisma.plan.upsert({
+          where: { key },
+          update: {},
+          create: {
+            key,
+            price: val.price,
+            unlocks: val.unlocks,
+            perks: JSON.stringify(val.perks),
+            order: i,
+          },
+        });
+      }
+    } catch {
+      // Fallback to DEFAULT_PLAN_CATALOG if DB is read-only or unavailable
+    }
   }
   return catalog;
 }
@@ -132,9 +188,11 @@ export async function getCatalog(
   filters: CatalogFilters,
   viewer: Viewer | null,
 ): Promise<(VideoCard & { saved: Record<string, boolean> })[]> {
+  const now = new Date();
   const videos = await prisma.video.findMany({
     where: {
       status: "PUBLISHED",
+      OR: [{ publishedAt: null }, { publishedAt: { lte: now } }],
       ...(filters.focus && filters.focus !== "Seated"
         ? { category: { name: filters.focus } }
         : {}),
@@ -214,7 +272,12 @@ export async function getVideoDetail(
     },
   });
   if (!video) return null;
-  if (video.status !== "PUBLISHED" && viewer?.role !== "ADMIN") return null;
+  if (
+    !isContentReleased({ status: video.status as VideoStatus, publishedAt: video.publishedAt }) &&
+    viewer?.role !== "ADMIN"
+  ) {
+    return null;
+  }
 
   const [progress, completions, saved] = await Promise.all([
     viewer
@@ -365,10 +428,15 @@ export async function getDashboardData(viewer: Viewer): Promise<DashboardData> {
       ? await prisma.video.findMany({
           where: {
             status: "PUBLISHED",
-            OR: [
-              { categoryId: { in: [...followedCategoryIds] } },
-              { masterId: { in: [...followedMasterIds] } },
-              { levelId: { in: [...followedLevelIds] } },
+            AND: [
+              { OR: [{ publishedAt: null }, { publishedAt: { lte: now } }] },
+              {
+                OR: [
+                  { categoryId: { in: [...followedCategoryIds] } },
+                  { masterId: { in: [...followedMasterIds] } },
+                  { levelId: { in: [...followedLevelIds] } },
+                ],
+              },
             ],
           },
           include: videoInclude,
@@ -462,11 +530,14 @@ async function getSuggestedSession(
   startedVideoIds: string[],
 ): Promise<VideoCard | null> {
   const stance = viewer.track ? trackStance(viewer.track) : undefined;
+  const now = new Date();
+  const releasedScope = { OR: [{ publishedAt: null }, { publishedAt: { lte: now } }] };
 
   const video =
     (await prisma.video.findFirst({
       where: {
         status: "PUBLISHED",
+        ...releasedScope,
         id: { notIn: startedVideoIds },
         ...(stance ? { stance: { in: stance } } : {}),
       },
@@ -474,7 +545,7 @@ async function getSuggestedSession(
       orderBy: [{ level: { order: "asc" } }, { createdAt: "asc" }],
     })) ??
     (await prisma.video.findFirst({
-      where: { status: "PUBLISHED", ...(stance ? { stance: { in: stance } } : {}) },
+      where: { status: "PUBLISHED", ...releasedScope, ...(stance ? { stance: { in: stance } } : {}) },
       include: videoInclude,
       orderBy: { createdAt: "asc" },
     }));
@@ -840,5 +911,89 @@ export async function getLevelsWithVideos() {
       durationLabel: formatDuration(v.duration),
       levelId: v.levelId,
     })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Content Calendar (Mini-Project 2)
+// ---------------------------------------------------------------------------
+
+export type CalendarVideoItem = {
+  id: string;
+  title: string;
+  slug: string;
+  categoryName: string;
+  masterName: string | null;
+  levelName: string | null;
+  durationLabel: string;
+  access: AccessLevel;
+  status: VideoStatus;
+  publishedAt: string | null;
+  isDue: boolean;
+  readiness: ReadinessResult;
+};
+
+export type CalendarData = {
+  scheduledVideos: CalendarVideoItem[];
+  draftVideos: CalendarVideoItem[];
+  publishedVideos: CalendarVideoItem[];
+  dueCount: number;
+};
+
+export async function getCalendarData(now: Date = new Date()): Promise<CalendarData> {
+  const rows = await prisma.video.findMany({
+    include: {
+      ...videoInclude,
+      _count: { select: { chapters: true } },
+    },
+    orderBy: [{ publishedAt: "asc" }, { createdAt: "desc" }],
+  });
+
+  const items: CalendarVideoItem[] = rows.map((row) => {
+    const domainVideo = new VideoContent({
+      id: row.id,
+      title: row.title,
+      slug: row.slug,
+      thumbnailUrl: row.thumbnailUrl,
+      status: row.status as VideoStatus,
+      createdAt: row.createdAt,
+      publishedAt: row.publishedAt,
+      categoryId: row.categoryId,
+      masterId: row.masterId,
+      levelId: row.levelId,
+      durationSeconds: row.duration,
+      access: row.access as AccessLevel,
+      sourceUrl: row.sourceUrl,
+      muxPlaybackId: row.muxPlaybackId,
+      chapterCount: row._count.chapters,
+    });
+
+    return {
+      id: row.id,
+      title: row.title,
+      slug: row.slug,
+      categoryName: row.category.name,
+      masterName: row.master?.name ?? null,
+      levelName: row.level?.name ?? null,
+      durationLabel: formatDuration(row.duration),
+      access: row.access as AccessLevel,
+      status: row.status as VideoStatus,
+      publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
+      isDue: domainVideo.isDue(now),
+      readiness: domainVideo.validateReadiness(),
+    };
+  });
+
+  const scheduledVideos = items.filter((item) => item.status === "SCHEDULED");
+  const draftVideos = items.filter((item) => item.status === "DRAFT");
+  const publishedVideos = items
+    .filter((item) => item.status === "PUBLISHED")
+    .sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""));
+
+  return {
+    scheduledVideos,
+    draftVideos,
+    publishedVideos,
+    dueCount: scheduledVideos.filter((item) => item.isDue).length,
   };
 }
