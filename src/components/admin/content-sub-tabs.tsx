@@ -7,12 +7,13 @@ import { SubTabs } from "@/components/admin/admin-tabs";
 export function ContentSubTabs({
   counts,
 }: {
-  counts: { blog: number; team: number; categories: number; masters: number };
+  counts: { blog: number; team: number; categories: number; masters: number; scheduled?: number };
 }) {
   const pathname = usePathname();
 
   const tabs = [
     { href: "/admin/content/blog", label: `Blog (${counts.blog})` },
+    { href: "/admin/content/calendar", label: `Calendar (${counts.scheduled ?? 0})` },
     { href: "/admin/content/team", label: `Team (${counts.team})` },
     { href: "/admin/content/categories", label: `Focus areas (${counts.categories})` },
     { href: "/admin/content/masters", label: `Instructors (${counts.masters})` },

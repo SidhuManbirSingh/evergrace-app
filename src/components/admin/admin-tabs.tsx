@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { href: "/admin/reports", label: "Reports & Impact" },
   { href: "/admin/videos", label: "Videos" },
+  { href: "/admin/content/calendar", label: "Content Calendar" },
   { href: "/admin/users", label: "Members" },
   { href: "/admin/content", label: "Content" },
   { href: "/admin/settings", label: "Settings" },
@@ -22,7 +23,13 @@ export function AdminTabs() {
       className="no-print mb-7 mt-6 flex flex-wrap gap-2.5 border-b-2 border-line"
     >
       {TABS.map((tab) => {
-        const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+        const isCalendar = pathname.startsWith("/admin/content/calendar");
+        const active =
+          tab.href === "/admin/content/calendar"
+            ? isCalendar
+            : tab.href === "/admin/content"
+              ? !isCalendar && (pathname === "/admin/content" || pathname.startsWith("/admin/content/"))
+              : pathname === tab.href || pathname.startsWith(`${tab.href}/`);
         return (
           <Link
             key={tab.href}

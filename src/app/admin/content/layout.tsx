@@ -9,16 +9,17 @@ export default async function AdminContentLayout({
 }) {
   await requireAdmin();
 
-  const [blog, team, categories, masters] = await Promise.all([
+  const [blog, team, categories, masters, scheduled] = await Promise.all([
     prisma.blogPost.count(),
     prisma.teamMember.count(),
     prisma.category.count(),
     prisma.master.count(),
+    prisma.video.count({ where: { status: "SCHEDULED" } }),
   ]);
 
   return (
     <div>
-      <ContentSubTabs counts={{ blog, team, categories, masters }} />
+      <ContentSubTabs counts={{ blog, team, categories, masters, scheduled }} />
       {children}
     </div>
   );
