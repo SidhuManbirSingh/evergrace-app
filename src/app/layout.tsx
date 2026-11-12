@@ -61,6 +61,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       suppressHydrationWarning
     >
       <head>
+        <meta name="darkreader-lock" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
@@ -71,7 +72,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           {themeScript}
         </Script>
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <AppProviders preferences={preferences} viewer={viewer} planCatalog={planCatalog}>
           <a
             href="#main"

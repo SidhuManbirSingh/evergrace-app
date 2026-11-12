@@ -14,12 +14,21 @@ function stroke(size: number, className?: string) {
     strokeLinejoin: "round" as const,
     className,
     "aria-hidden": true,
+    suppressHydrationWarning: true,
   };
 }
 
 export function PlayIcon({ size = 24, className }: IconProps) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden
+      suppressHydrationWarning
+    >
       <path d="M8 5v14l11-7z" />
     </svg>
   );
@@ -27,7 +36,15 @@ export function PlayIcon({ size = 24, className }: IconProps) {
 
 export function PauseIcon({ size = 24, className }: IconProps) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden
+      suppressHydrationWarning
+    >
       <rect x="6" y="5" width="4" height="14" rx="1" />
       <rect x="14" y="5" width="4" height="14" rx="1" />
     </svg>
@@ -56,7 +73,7 @@ export function AccessibilityIcon({ size = 24, className }: IconProps) {
   return (
     <svg {...stroke(size, className)}>
       <circle cx="12" cy="12" r="9" />
-      <circle cx="12" cy="8" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="8" r="1.4" fill="currentColor" stroke="none" suppressHydrationWarning />
       <path d="M12 11v6" />
     </svg>
   );

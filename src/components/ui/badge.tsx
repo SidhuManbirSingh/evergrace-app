@@ -36,6 +36,7 @@ export function AccessBadge({
 export function VideoStatusBadge({ status }: { status: VideoStatus }) {
   const tone = {
     PUBLISHED: "bg-success-soft text-success",
+    SCHEDULED: "bg-accent-soft text-accent-dark",
     PROCESSING: "bg-warn-soft text-warn",
     DRAFT: "bg-line text-muted",
   }[status];
