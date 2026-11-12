@@ -76,7 +76,8 @@ services:
       # host filesystem events into the container, so webpack's native
       # watcher never fires on host edits. Polling works everywhere at the
       # cost of a bit of CPU.
-      WATCHPACK_POLLING: "true"
+      WATCHPACK_POLLING: "2000"
+      NODE_OPTIONS: "--max-old-space-size=1536"
     volumes:
       - .:/app
       # Anonymous volumes: keep the image's Linux-built node_modules and
@@ -86,7 +87,7 @@ services:
       - /app/node_modules
       - /app/.next
     ports:
-      - "3000:3000"
+      - "8081:3000"
     depends_on:
       db:
         condition: service_healthy
@@ -101,5 +102,5 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1.0"
-          memory: 512M
+          cpus: "4.0"
+          memory: 2048M
