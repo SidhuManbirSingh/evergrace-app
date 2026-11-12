@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   ACCESS_LEVELS,
+  CONTENT_TYPES,
   FOLLOW_KINDS,
   INTENSITIES,
   PLANS,
@@ -33,7 +34,7 @@ export const signUpSchema = z.object({
 
 export const adminLoginSchema = z.object({
   email: emailSchema,
-  password: z.string().min(8, "Passwords are at least 8 characters."),
+  password: z.string().trim().min(8, "Passwords are at least 8 characters."),
 });
 
 export const moodSchema = z.object({
@@ -86,6 +87,25 @@ export const videoAccessSchema = z.object({
 export const videoStatusSchema = z.object({
   videoId: z.string().min(1),
   status: z.enum(VIDEO_STATUSES),
+});
+
+/**
+ * Scheduling a draft or already-scheduled video for a future calendar release
+ * (Mini-Project 1 Step 4 & Mini-Project 2).
+ */
+export const videoScheduleSchema = z.object({
+  videoId: z.string().min(1, "Pick a video to schedule."),
+  releaseDate: z.coerce.date({
+    invalid_type_error: "Enter a valid release date and time.",
+  }),
+});
+
+export const contentScheduleSchema = z.object({
+  contentType: z.enum(CONTENT_TYPES),
+  id: z.string().min(1),
+  releaseAt: z.coerce.date({
+    invalid_type_error: "Enter a valid release date and time.",
+  }),
 });
 
 export const videoUploadSchema = z.object({
